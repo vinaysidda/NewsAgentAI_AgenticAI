@@ -4,9 +4,11 @@ from fastapi.staticfiles import StaticFiles
 from typing import List, Optional
 import os, uuid
 
+
+
 from app.storage import DB
 from app.agents.models import ArticleCreate, ArticleUpdate, ScheduleRequest
-from app.agents.crawler import fetch_rss_articles, fetch_html_article
+from app.agents.crawler import fetch_rss_articles #fetch_html_article
 from app.agents.emailer import load_recipients_from_csv, schedule_email_job
 
 app = FastAPI(title="News Multi-Agent POC")
