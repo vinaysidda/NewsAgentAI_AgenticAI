@@ -1,0 +1,152 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>News Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    h1 { margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { border: 1px solid #ccc; padding: 8px; vertical-align: top; }
+    th { background: #f7f7f7; }
+    input, select, button { margin-right: 8px; }
+    .actions button { margin-right: 6px; }
+    .small { font-size: 12px; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>News Dashboard</h1>
+
+  <div>
+    <label>Source:</label>
+    <select id="source">
+      <option value="">All</option>
+      <option value="BBC">BBC</option>
+      <option value="CNN">CNN</option>
+      <option value="FOX">FOX</option>
+    </select>
+    <label>Limit:</label>
+    <input id="limit" type="number" value="10" min="1" max="50"/>
+    <button onclick="crawl()">Crawl</button>
+    <span class="small" id="status"></span>
+  </div>
+
+  <div style="margin-top: 12px;">
+    <form id="csvForm">
+      <input type="file" name="file" accept=".csv" />
+      <button type="submit">Upload Recipients CSV</button>
+    </form>
+  </div>
+
+  <div style="margin-top: 12px;">
+    <form id="emailForm">
+      <input name="smtp_host" placeholder="SMTP Host" required />
+      <input name="smtp_port" placeholder="465" value="465" />
+      <input name="sender" placeholder="Sender Email" required />
+      <input name="username" placeholder="SMTP Username" required />
+      <input name="password" placeholder="SMTP Password" type="password" required />
+      <br/>
+      <input id="subject" placeholder="Subject" style="width: 40%;" />
+      <input id="body" placeholder="Body template (use {headlines})" style="width: 58%;" value="Top headlines:\n{headlines}" />
+      <input id="cron" placeholder="Cron (e.g. */30 * * * *) optional" style="width: 40%;" />
+      <button type="button" onclick="scheduleEmail()">Send / Schedule</button>
+    </form>
+  </div>
+
+  <table id="newsTable">
+    <thead>
+      <tr>
+        <th>SL No.</th>
+        <th>Name of News Agency</th>
+        <th>Information (first ~80 lines)</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+<script>
+async function crawl() {
+  const source = document.getElementById('source').value;
+  const limit = parseInt(document.getElementById('limit').value || '10', 10);
+  const params = new URLSearchParams({ limit });
+  if (source) params.append('source', source);
+  const r = await fetch('/crawl', { method: 'POST', body: params });
+  document.getElementById('status').innerText = 'Crawl done';
+  await refresh();
+}
+
+async function refresh() {
+  const res = await fetch('/articles');
+  const data = await res.json();
+  const tbody = document.querySelector('#newsTable tbody');
+  tbody.innerHTML = '';
+
+  data.forEach((row, idx) => {
+    const tr = document.createElement('tr');
+    const snippet = (row.content || '').split('\n').slice(0, 80).join('\n');
+
+    tr.innerHTML = `
+      <td>${idx + 1}</td>
+      <td>${row.source}</td>
+      <td>
+        <div><strong>${row.title}</strong></div>
+        <div class="small"><a href="${row.url}" target="_blank">${row.url}</a></div>
+        <pre style="white-space:pre-wrap">${snippet}</pre>
+      </td>
+      <td class="actions">
+        <button onclick="editArticle(${row.id})">Edit</button>
+        <button onclick="deleteArticle(${row.id})">Delete</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function editArticle(id) {
+  const title = prompt('New title (leave blank to keep):');
+  const content = prompt('New content (leave blank to keep):');
+  const payload = {};
+  if (title) payload.title = title;
+  if (content) payload.content = content;
+  const res = await fetch(`/articles/${id}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  await refresh();
+}
+
+async function deleteArticle(id) {
+  await fetch(`/articles/${id}`, { method: 'DELETE' });
+  await refresh();
+}
+
+document.getElementById('csvForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const r = await fetch('/upload-recipients', { method: 'POST', body: fd });
+  const j = await r.json();
+  alert(`Loaded ${j.loaded} recipients`);
+});
+
+async function scheduleEmail() {
+  const fd = new FormData(document.getElementById('emailForm'));
+  const subject = document.getElementById('subject').value || 'News Digest';
+  const body = document.getElementById('body').value || 'Top:\n{headlines}';
+  const cron = document.getElementById('cron').value || null;
+
+  const req = { subject, body_template: body, cron };
+  fd.append('subject', subject);
+  fd.append('body_template', body);
+  if (cron) fd.append('cron', cron);
+
+  const r = await fetch('/schedule-email', { method: 'POST', body: fd });
+  const j = await r.json();
+  alert(j.status);
+}
+
+refresh();
+</script>
+</body>
+</html>
