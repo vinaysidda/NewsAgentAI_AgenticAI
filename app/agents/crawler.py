@@ -8,8 +8,10 @@ RSS_FEEDS = {
     "TheHindu": "https://www.thehindu.com/news/national/feeder/default.rss",
 }
 
-def fetch_rss_articles(source: str, limit: int = 10):
+def fetch_rss_articles(source:str, limit: int = 10):
     url = RSS_FEEDS[source]
+    # print(source)
+    # print("the new ", url)
     r = requests.get(url, timeout=10)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "xml")
@@ -23,7 +25,7 @@ def fetch_rss_articles(source: str, limit: int = 10):
     return results
 
 # OPTIONAL: direct HTML crawling (respect robots.txt/TOS)
-def fetch_html_article(url: str) -> str:
+def fetch_html_article(url: str):
     hdrs = {"User-Agent": "Mozilla/5.0"}
     html = requests.get(url, headers=hdrs, timeout=10).text
     soup = BeautifulSoup(html, "html.parser")

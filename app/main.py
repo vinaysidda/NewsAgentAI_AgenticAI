@@ -50,26 +50,73 @@ def delete_article(article_id: int):
     return {"deleted": ok}
 
 # --------- Emails ----------
-@app.post("/upload-recipients")
-def upload_recipients(file: UploadFile = File(...)):
-    tmp = f"/tmp/{uuid.uuid4()}_{file.filename}"
-    with open(tmp, "wb") as f:
-        f.write(file.file.read())
-    recips = load_recipients_from_csv(tmp)
-    os.remove(tmp)
-    return {"loaded": len(recips)}
+# @app.post("/upload-recipients")
+# def upload_recipients(file: UploadFile = File(...)):
+#     tmp = f"/tmp/{uuid.uuid4()}_{file.filename}"
+#     with open(tmp, "wb") as f:
+#         f.write(file.file.read())
+#     recips = load_recipients_from_csv(tmp)
+#     os.remove(tmp)
+#     return {"loaded": len(recips)}
+
+# @app.post("/schedule-email")
+# def schedule_email(req: ScheduleRequest,
+#                    smtp_host: str = Form(...),
+#                    smtp_port: int = Form(465),
+#                    sender: str = Form(...),
+#                    username: str = Form(...),
+#                    password: str = Form(...)):
+#     schedule_email_job(
+#         subject=req.subject,
+#         body_template=req.body_template,
+#         cron=req.cron,
+#         smtp_cfg={"host": smtp_host, "port": smtp_port, "sender": sender, "username": username, "password": password}
+#     )
+#     return {"status": "scheduled" if req.cron else "sent-once"}
+
 
 @app.post("/schedule-email")
-def schedule_email(req: ScheduleRequest,
-                   smtp_host: str = Form(...),
-                   smtp_port: int = Form(465),
-                   sender: str = Form(...),
-                   username: str = Form(...),
-                   password: str = Form(...)):
+def schedule_email(
+    subject: str = Form(...),
+    body_template: str = Form(...),
+    cron: Optional[str] = Form(None),
+    smtp_host: str = Form(...),
+    smtp_port: int = Form(465),
+    sender: str = Form(...),
+    username: str = Form(...),
+    password: str = Form(...)
+):
     schedule_email_job(
-        subject=req.subject,
-        body_template=req.body_template,
-        cron=req.cron,
-        smtp_cfg={"host": smtp_host, "port": smtp_port, "sender": sender, "username": username, "password": password}
+        subject=subject,
+        body_template=body_template,
+        cron=cron,
+        smtp_cfg={
+            "host": smtp_host,
+            "port": smtp_port,
+            "sender": sender,
+            "username": username,
+            "password": password,
+        },
     )
-    return {"status": "scheduled" if req.cron else "sent-once"}
+    return {"status": "scheduled" if cron else "sent-once"}
+
+
+from typing import Optional
+import tempfile, os
+
+@app.post("/upload-recipients")
+async def upload_recipients(file: UploadFile = File(...)):
+    # Save to a cross-platform temp file, then parse
+    data = await file.read()
+    with tempfile.NamedTemporaryFile(mode="w+", suffix=f"_{file.filename}",
+                                     delete=False, encoding="utf-8", newline="") as tmp:
+        tmp.write(data.decode("utf-8", errors="ignore"))
+        tmp_path = tmp.name
+    try:
+        recips = load_recipients_from_csv(tmp_path)
+        return {"loaded": len(recips)}
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
